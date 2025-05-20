@@ -8,19 +8,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Pull Docker image from GHCR
-        run: |
-          docker pull ghcr.io/${{ github.repository_owner }}/clienteapi-salas:latest
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Run container from image
-        run: |
-          docker run -d --rm -p 5000:5000 --name clienteapi ghcr.io/${{ github.repository_owner }}/clienteapi-salas:latest
-          sleep 10  # espera a que el contenedor se levante
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v3
 
-      - name: Get Prometheus metric
-        run: |
-          curl http://localhost:5000/metrics | grep -i 'healthcheck' || echo "No healthcheck metric found"
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Stop container
-        if: always()
-        run: docker stop clienteapi
+    - name: Pull and run container
+      run: |
+        docker pull ghcr.io/wsalas651/clienteapi_salas:latest
+        docker run -d --name clienteapi -p 5000:80 ghcr.io/wsalas651/clienteapi_salas:latest
+        sleep 5  # espera unos segundos a que el contenedor inicie
+
+    - name: Make GET request to Prometheus metrics
+      run: |
+        echo "Esperando respuesta de métricas Prometheus..."
+        curl --fail http://localhost:5000/health-metrics || (
+          echo "No se pudo acceder a la métrica Prometheus" && exit 1
+        )
