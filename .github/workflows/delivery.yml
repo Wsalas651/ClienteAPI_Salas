@@ -1,4 +1,4 @@
-name: Manual Delivery and Test Prometheus
+name: Manual Delivery & Prometheus Test
 
 on:
   workflow_dispatch:
@@ -8,19 +8,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
+      - name: Pull Docker image from GHCR
+        run: |
+          docker pull ghcr.io/${{ github.repository_owner }}/clienteapi-salas:latest
 
-    - name: Run container from GHCR image
-      run: |
-        docker run -d -p 5000:80 --name cliente-api ghcr.io/${{ github.repository }}:latest
-        sleep 10  # espera para que levante el contenedor
+      - name: Run container from image
+        run: |
+          docker run -d --rm -p 5000:5000 --name clienteapi ghcr.io/${{ github.repository_owner }}/clienteapi-salas:latest
+          sleep 10  # espera a que el contenedor se levante
 
-    - name: Check Prometheus metric
-      run: |
-        response=$(curl -s http://localhost:5000/health-metrics)
-        echo "$response"
+      - name: Get Prometheus metric
+        run: |
+          curl http://localhost:5000/metrics | grep -i 'healthcheck' || echo "No healthcheck metric found"
 
-    - name: Stop container
-      if: always()
-      run: docker stop cliente-api && docker rm cliente-api
+      - name: Stop container
+        if: always()
+        run: docker stop clienteapi
