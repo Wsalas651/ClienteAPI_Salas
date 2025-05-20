@@ -1,0 +1,82 @@
+version: "3.9"
+
+services:
+  bd_clientes:
+    image: "mcr.microsoft.com/mssql/server"
+    container_name: bd_clientes
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=Upt.2022
+    volumes:
+      - sqlserverdata:/var/opt/mssql
+    networks:
+      - red_interna
+
+  bd_init:
+    image: mcr.microsoft.com/mssql-tools
+    container_name: bd_init
+    depends_on:
+      - bd_clientes
+    entrypoint: /bin/bash
+    command: >
+      -c "
+        echo 'Esperando que SQL Server esté listo...';
+        until /opt/mssql-tools/bin/sqlcmd -S bd_clientes -U sa -P Upt.2022 -Q 'SELECT 1' > /dev/null 2>&1; do
+          sleep 3;
+        done;
+        echo 'Ejecutando cliente.sql...';
+        /opt/mssql-tools/bin/sqlcmd -S bd_clientes -U sa -P Upt.2022 -i /scripts/clientes.sql;
+        echo 'Script ejecutado correctamente.';
+      "
+    volumes:
+      - ./db:/scripts:ro
+    networks:
+      - red_interna
+
+  api:
+    build: .
+    container_name: api_clientes
+    ports:
+      - "5000:8080"
+    environment:
+      - ConnectionStrings__ClienteDB=Server=bd_clientes;Database=BD_CLIENTES;User Id=sa;Password=Upt.2022;TrustServerCertificate=true
+    depends_on:
+      - bd_init
+    restart: on-failure
+    networks:
+      - red_interna
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./metrics/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - api
+    networks:
+      - red_interna
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./metrics/grafana_ds:/etc/grafana/provisioning/datasources
+      - ./metrics/grafana_db:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - red_interna
+
+volumes:
+  sqlserverdata:
+
+networks:
+  red_interna:
+    driver: bridge
